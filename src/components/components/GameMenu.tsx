@@ -118,7 +118,7 @@ export default function GameMenu() {
               Solo Runner
             </h2>
             <p style={{ fontSize: 14, margin: 0, color: "#666" }}>
-              Run alone and escape the fryer
+              Run through the field, jump and dodge the fryer
             </p>
           </div>
           <div
@@ -197,10 +197,10 @@ export default function GameMenu() {
     >
       <div style={{ textAlign: "center", marginBottom: 60 }}>
         <h1 style={{ fontSize: 72, margin: 0, color: "#FF6B35" }}>
-          🐔 Chicken Escape 🐔
+          🐔 Chicken Runner 🐔
         </h1>
         <p style={{ fontSize: 24, margin: "20px 0", color: "#666" }}>
-          Choose your adventure!
+          Run through the field and escape the fryer!
         </p>
         <p style={{ fontSize: 16, margin: "10px 0", color: "#888" }}>
           Created by SharkNinja on Aug 25, 2025
@@ -222,10 +222,10 @@ export default function GameMenu() {
         >
           <div style={{ fontSize: 48, marginBottom: 15 }}>🏃‍♂️</div>
           <h2 style={{ fontSize: 28, margin: "0 0 10px 0", color: "#4CAF50" }}>
-            3D Runner
+            3D Field Runner
           </h2>
           <p style={{ fontSize: 16, margin: 0, color: "#666" }}>
-            Endless 3D running
+            Endless running through the field
           </p>
         </div>
         <div

@@ -1,14 +1,14 @@
 import { useRef, useState, useEffect } from "react";
-import { useFrame } from "@react-three/fiber";
-import { Group } from "three";
+import { useFrame, useThree } from "@react-three/fiber";
+import { Group, Vector3 } from "three";
 import { Html, OrbitControls, useFBX, useTexture } from "@react-three/drei";
 import { useGameLogic } from "hooks/useGameLogic";
 
 function Ground() {
   return (
-    <mesh rotation-x={-Math.PI / 2} receiveShadow>
-      <planeGeometry args={[50, 50]} />
-      <meshStandardMaterial color="#228B22" />
+    <mesh rotation-x={-Math.PI / 2} receiveShadow position={[0, 0, 0]}>
+      <planeGeometry args={[200, 200]} />
+      <meshStandardMaterial color="#90EE90" />
     </mesh>
   );
 }
@@ -17,7 +17,7 @@ function Fryer({ position }: { position: [number, number, number] }) {
   return (
     <mesh position={position} castShadow>
       <boxGeometry args={[2, 2, 2]} />
-      <meshStandardMaterial color="#555555" />
+      <meshStandardMaterial color="#8B0000" />
     </mesh>
   );
 }
@@ -28,6 +28,7 @@ interface ChickenEscape3DProps {
 
 export default function ChickenEscape3D({ gameMode }: ChickenEscape3DProps) {
   const groupRef = useRef<Group>(null);
+  const { camera } = useThree();
   const mode: "solo" | "team" = gameMode === "team" ? "team" : "solo";
 
   const { jump, playJumpSound, playHitSound } = useGameLogic(mode);
@@ -36,14 +37,20 @@ export default function ChickenEscape3D({ gameMode }: ChickenEscape3DProps) {
   const fbx = useFBX("/chiken/source/петух.fbx");
   const texture = useTexture("/chiken/textures/утка.png");
 
-  // Player & lanes
-  const [lane, setLane] = useState<number>(1); // 0 left, 1 center, 2 right
+  // Player position
   const [playerPos, setPlayerPos] = useState<[number, number, number]>([
     0, 0, 0,
   ]);
   const [playerHealth, setPlayerHealth] = useState(100);
+  const [velocityY, setVelocityY] = useState(0);
+  const [onGround, setOnGround] = useState(true);
 
-  // Solo obstacles
+  // Fryer position
+  const [fryerPos, setFryerPos] = useState<[number, number, number]>([
+    0, 0, -20,
+  ]);
+
+  // Solo obstacles - removed for field runner
   const [obstacles, setObstacles] = useState<Array<[number, number, number]>>(
     []
   );
@@ -58,25 +65,19 @@ export default function ChickenEscape3D({ gameMode }: ChickenEscape3DProps) {
     position: [number, number, number];
   }>>([]);
 
-  // Generate obstacles for solo mode
-  useEffect(() => {
-    if (mode === "solo") {
-      const obs: Array<[number, number, number]> = [];
-      for (let i = 5; i < 50; i += 5) {
-        const laneIndex = Math.floor(Math.random() * 3);
-        obs.push([laneIndex - 1, 0.5, -i]);
-      }
-      setObstacles(obs);
-    }
-  }, [mode]);
-
   // Controls
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
       if (mode === "solo") {
-        if (e.key === "ArrowLeft" && lane > 0) setLane(lane - 1);
-        if (e.key === "ArrowRight" && lane < 2) setLane(lane + 1);
-        if (e.code === "Space") jump();
+        if (e.key === "ArrowLeft")
+          setPlayerPos([playerPos[0] - 1, playerPos[1], playerPos[2]]);
+        if (e.key === "ArrowRight")
+          setPlayerPos([playerPos[0] + 1, playerPos[1], playerPos[2]]);
+        if (e.code === "Space" && onGround) {
+          setVelocityY(0.2);
+          setOnGround(false);
+          playJumpSound();
+        }
       } else {
         if (e.key === "ArrowLeft")
           setPlayerPos([playerPos[0] - 1, playerPos[1], playerPos[2]]);
@@ -99,23 +100,55 @@ export default function ChickenEscape3D({ gameMode }: ChickenEscape3DProps) {
     };
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
+  }, [playerPos, onGround, jump, mode, playJumpSound]);
+    return () => window.removeEventListener("keydown", handleKey);
   }, [lane, playerPos, jump, mode]);
 
   // Game loop
   useFrame((state, delta) => {
-    // Move obstacles (solo)
+    // Move player forward continuously in solo mode
     if (mode === "solo") {
-      setObstacles((obs) =>
-        obs.map(
-          ([x, y, z]) => [x, y, z + delta * 5] as [number, number, number]
-        )
-      );
-      // Check collisions
-      obstacles.forEach(([x, y, z]) => {
-        if (Math.abs(x - (lane - 1)) < 0.5 && Math.abs(z) < 1) {
-          setPlayerHealth(0);
+      setPlayerPos((prev) => [prev[0], prev[1], prev[2] - delta * 10]);
+
+      // Gravity and jump
+      setVelocityY((vy) => vy + -0.01);
+      setPlayerPos((prev) => {
+        const newY = prev[1] + velocityY;
+        if (newY <= 0) {
+          setVelocityY(0);
+          setOnGround(true);
+          return [prev[0], 0, prev[2]];
         }
+        return [prev[0], newY, prev[2]];
       });
+
+      // Move fryer towards player
+      setFryerPos((prev) => {
+        const dx = playerPos[0] - prev[0];
+        const dz = playerPos[2] - prev[2];
+        const dist = Math.sqrt(dx * dx + dz * dz);
+        if (dist > 2) {
+          const speed = 0.05;
+          return [
+            prev[0] + (dx / dist) * speed,
+            prev[1],
+            prev[2] + (dz / dist) * speed,
+          ];
+        }
+        return prev;
+      });
+
+      // Check collision with fryer
+      const distToFryer = Math.sqrt(
+        (playerPos[0] - fryerPos[0]) ** 2 + (playerPos[2] - fryerPos[2]) ** 2
+      );
+      if (distToFryer < 2) {
+        setPlayerHealth(0);
+      }
+
+      // Update camera to follow player
+      camera.position.set(playerPos[0], 8, playerPos[2] + 12);
+      camera.lookAt(playerPos[0], 0, playerPos[2]);
     } else {
       // Projectiles move
       setProjectiles((p) =>
@@ -169,19 +202,13 @@ export default function ChickenEscape3D({ gameMode }: ChickenEscape3DProps) {
         <Ground />
         <primitive
           object={fbx}
-          position={[lane - 1, 0, 0]}
+          position={playerPos}
           scale={[0.02, 0.02, 0.02]}
         >
           <meshStandardMaterial map={texture} />
         </primitive>
 
-        {mode === "solo" &&
-          obstacles.map((pos, i) => (
-            <mesh key={i} position={pos}>
-              <boxGeometry args={[1, 1, 1]} />
-              <meshStandardMaterial color="red" />
-            </mesh>
-          ))}
+        {mode === "solo" && <Fryer position={fryerPos} />}
 
         {mode === "team" && <Fryer position={[0, 0, -10]} />}
       </group>
@@ -224,7 +251,8 @@ export default function ChickenEscape3D({ gameMode }: ChickenEscape3DProps) {
         )}
       </Html>
 
-      <OrbitControls enablePan enableZoom enableRotate />
+      {mode === "solo" && <OrbitControls enablePan={false} enableZoom={false} enableRotate={false} />}
+      {mode === "team" && <OrbitControls enablePan enableZoom enableRotate />}
     </>
   );
 }
